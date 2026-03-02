@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>คูหาเลือกตั้ง - อาชีวศึกษาปากพนัง 2569</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Anuphan:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Anuphan', 'sans-serif'] },
+                    colors: { brand: '#2563eb', brandDark: '#1e40af' }
+                }
+            }
+        }
+    </script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <style>
+        body { background-color: #f8fafc; color: #0f172a; height: 100vh; overflow: hidden; display: flex; align-items: center; justify-content: center; padding-top: 5rem; }
+        
+        /* Header ล็อกติดขอบบน */
+        .top-header { position: fixed; top: 0; left: 0; right: 0; background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); border-bottom: 1px solid #e2e8f0; z-index: 50; padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
+
+        .white-card { background: #ffffff; border-radius: 1.5rem; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05); border: 1px solid #e2e8f0; transition: all 0.4s; }
+        .input-mega { width: 100%; padding: 1.25rem 1.5rem; font-size: 1.5rem; text-align: center; letter-spacing: 0.05em; border-radius: 1rem; border: 2px solid #cbd5e1; outline: none; transition: all 0.3s; }
+        .input-mega:focus { border-color: #2563eb; box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1); }
+        .btn-mega { width: 100%; padding: 1.25rem; font-size: 1.25rem; font-weight: 700; border-radius: 1rem; background: #2563eb; color: white; display: flex; align-items: center; justify-content: center; gap: 0.5rem; transition: all 0.3s; }
+        .btn-mega:hover { background: #1e40af; transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.3); }
+
+        /* Card พรรคปกติ */
+        .party-card { background: #ffffff; border: 2px solid #e2e8f0; border-radius: 1rem; padding: 1.25rem; cursor: pointer; position: relative; transition: all 0.2s; }
+        .party-card:hover { border-color: #93c5fd; background: #f0fdfa; transform: translateY(-2px); }
+        .party-card.selected { border-color: #10b981; background: #ecfdf5; box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.1); }
+        
+        /* Card ไม่ประสงค์ลงคะแนน (Vote No) */
+        .abstain-card { background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 1rem; padding: 1.25rem; cursor: pointer; transition: all 0.2s; text-align: center; }
+        .abstain-card:hover { border-color: #94a3b8; background: #f1f5f9; transform: translateY(-2px); }
+        .abstain-card.selected { border-style: solid; border-color: #ef4444; background: #fef2f2; box-shadow: 0 4px 6px -1px rgba(239, 68, 68, 0.1); }
+
+        .check-icon { position: absolute; top: 1rem; right: 1rem; color: #10b981; opacity: 0; transform: scale(0.5); transition: all 0.3s; }
+        .party-card.selected .check-icon, .abstain-card.selected .check-icon { opacity: 1; transform: scale(1); }
+        .abstain-card.selected .check-icon { color: #ef4444; }
+
+        .screen-state { display: none; opacity: 0; transform: translateY(20px); animation: screenIn 0.5s forwards; }
+        .screen-state.active { display: block; }
+        @keyframes screenIn { to { opacity: 1; transform: translateY(0); } }
+        
+        #confirmModal { display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(4px); z-index: 100; align-items: center; justify-content: center; }
+        #confirmModal.active { display: flex; animation: fadeIn 0.3s forwards; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        #toast-container { position: fixed; top: 6rem; right: 2rem; z-index: 200; }
+        .toast { background: white; border-left: 4px solid #ef4444; padding: 1rem 1.5rem; border-radius: 0.5rem; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); display: flex; align-items: center; gap: 0.75rem; font-weight: bold; animation: slideInRight 0.3s forwards; margin-bottom: 0.5rem; }
+        @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
+    </style>
+</head>
+<body>
+
+    <header class="top-header">
+        <div class="flex items-center gap-4">
+            <div class="w-12 h-12 bg-brand text-white rounded-xl flex items-center justify-center shadow-md">
+                <i class="ph-fill ph-check-box text-3xl"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-slate-800 text-xl leading-tight">ระบบลงคะแนนเลือกตั้งคณะกรรมการนักเรียน</h1>
+                <p class="text-sm font-medium text-slate-500">อาชีวศึกษาปากพนัง ประจำปีการศึกษา 2569</p>
+            </div>
+        </div>
+        <div class="text-right bg-slate-50 px-4 py-2 rounded-lg border border-slate-200">
+            <p id="realtime-date" class="text-sm font-bold text-slate-600">-</p>
+            <p id="realtime-time" class="text-xl text-brand font-mono font-bold tracking-widest">-</p>
+        </div>
+    </header>
+
+    <div id="toast-container"></div>
+
+    <div class="w-full max-w-5xl px-4 h-full flex items-center justify-center">
+
+        <div id="state-unlock" class="screen-state active max-w-md w-full">
+            <div class="white-card p-10 text-center">
+                <div class="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6 text-brand">
+                    <i class="ph-duotone ph-lock-key text-5xl"></i>
+                </div>
+                <h2 class="text-3xl font-bold mb-2 text-slate-800">เปิดคูหาเลือกตั้ง</h2>
+                <p class="text-slate-500 mb-8">กรุณาใส่รหัสผ่านเพื่อเปิดหีบ (สำหรับเจ้าหน้าที่)</p>
+                
+                <form onsubmit="unlockBooth(event)">
+                    <input type="password" id="pollCodeInput" class="input-mega mb-6" placeholder="รหัสเปิดหีบ" required>
+                    <button type="submit" class="btn-mega">
+                        <i class="ph-bold ph-lock-open"></i> ปลดล็อกระบบ
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <div id="state-verify" class="screen-state max-w-lg w-full">
+            <div class="white-card p-10 text-center relative overflow-hidden">
+                <div class="absolute top-0 left-0 right-0 bg-green-500 text-white text-sm font-bold py-1.5 flex justify-center items-center gap-2 shadow-sm">
+                    <i class="ph-fill ph-check-circle"></i> ระบบเปิดพร้อมใช้งาน
+                </div>
+
+                <div class="mt-6 mb-6 text-brand">
+                    <i class="ph-duotone ph-identification-card text-7xl"></i>
+                </div>
+                <h2 class="text-3xl font-bold mb-2 text-slate-800">ตรวจสอบสิทธิ์</h2>
+                <p class="text-slate-500 mb-8">กรุณากรอกรหัสประจำตัวนักเรียนของท่าน</p>
+                
+                <form onsubmit="verifyStudent(event)">
+                    <input type="text" id="studentIdInput" class="input-mega mb-6 font-bold text-brand" placeholder="ระบุรหัสนักเรียน" required autocomplete="off">
+                    <button type="submit" class="btn-mega">
+                        <i class="ph-bold ph-magnifying-glass"></i> ตรวจสอบสิทธิ์
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <div id="state-ballot" class="screen-state w-full">
+            <div class="white-card p-8 flex flex-col md:flex-row gap-8 max-h-[80vh]">
+                
+                <div class="md:w-1/3 border-b md:border-b-0 md:border-r border-slate-100 pb-6 md:pb-0 md:pr-6 flex flex-col">
+                    <div class="flex items-center gap-3 mb-6">
+                        <i class="ph-duotone ph-user-circle text-4xl text-brand"></i>
+                        <h3 class="text-xl font-bold text-slate-800">ข้อมูลผู้ใช้สิทธิ์</h3>
+                    </div>
+                    
+                    <div class="bg-slate-50 p-6 rounded-xl border border-slate-200 flex-1">
+                        <p class="text-sm text-slate-500 mb-1">รหัสประจำตัว</p>
+                        <p id="disp-id" class="text-xl font-bold text-brand mb-4">-</p>
+                        <p class="text-sm text-slate-500 mb-1">ชื่อ-สกุล</p>
+                        <p id="disp-name" class="text-xl font-bold text-slate-800 mb-4">-</p>
+                        <p class="text-sm text-slate-500 mb-1">ระดับชั้น</p>
+                        <p class="text-lg font-bold text-slate-700">
+                            <span id="disp-grade">-</span> <span class="text-slate-300 font-normal mx-1">|</span> ห้อง <span id="disp-room">-</span>
+                        </p>
+                    </div>
+
+                    <button onclick="resetToVerify()" type="button" class="mt-4 w-full py-3.5 rounded-xl font-bold text-slate-600 bg-white border-2 border-slate-200 hover:bg-slate-50 transition flex items-center justify-center gap-2">
+                        <i class="ph-bold ph-x-circle text-lg"></i> ยกเลิก / ออก
+                    </button>
+                </div>
+
+                <div class="md:w-2/3 flex flex-col h-full">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-2xl font-bold text-slate-800 flex items-center gap-2">
+                            <i class="ph-duotone ph-check-square-offset text-brand"></i> โปรดเลือกพรรคที่ต้องการ
+                        </h3>
+                    </div>
+
+                    <div class="flex-1 overflow-y-auto pr-2 pb-2">
+                        <div id="partyGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            </div>
+                        <div id="abstainZone" class="mt-4 pt-4 border-t border-slate-200">
+                            </div>
+                    </div>
+
+                    <button id="btn-submit-intent" onclick="openConfirmModal()" type="button" class="mt-4 w-full py-4 rounded-xl font-bold text-white text-xl bg-slate-300 cursor-not-allowed transition-all flex items-center justify-center gap-2 shrink-0" disabled>
+                        ลงคะแนนเสียง <i class="ph-bold ph-arrow-right"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="state-success" class="screen-state max-w-md w-full">
+            <div class="white-card p-12 text-center">
+                <div class="w-24 h-24 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-6 text-green-500">
+                    <i class="ph-fill ph-check-circle text-6xl"></i>
+                </div>
+                <h2 class="text-3xl font-bold mb-4 text-slate-800">ลงคะแนนสำเร็จ!</h2>
+                <p class="text-lg text-slate-600 mb-6">ขอบคุณที่มาใช้สิทธิ์เลือกตั้งครับ</p>
+                <div class="w-full bg-slate-100 rounded-full h-2 mb-4 overflow-hidden">
+                    <div class="bg-green-500 h-2 rounded-full" style="width: 100%; animation: progress 3s linear forwards;"></div>
+                </div>
+                <p class="text-sm text-slate-400">ระบบจะเตรียมพร้อมสำหรับผู้ใช้สิทธิ์ท่านต่อไป...</p>
+            </div>
+        </div>
+
+    </div>
+
+    <div id="confirmModal">
+        <div class="bg-white rounded-2xl p-8 max-w-md w-full mx-4 shadow-2xl transform transition-transform scale-95 border border-slate-100" id="modalContent">
+            <div class="text-center mb-6">
+                <i class="ph-duotone ph-warning-circle text-6xl text-amber-500 mb-2"></i>
+                <h2 class="text-2xl font-bold text-slate-800">ยืนยันการลงคะแนน?</h2>
+                <p class="text-slate-500 mt-2">เมื่อยืนยันแล้วจะไม่สามารถกลับมาแก้ไขได้</p>
+            </div>
+            
+            <div class="bg-slate-50 p-5 rounded-xl border border-slate-200 mb-8 text-center" id="confirm-box-bg">
+                <p class="text-sm text-slate-500" id="confirm-label">คุณกำลังจะลงคะแนนให้</p>
+                <div class="mt-3 flex items-center justify-center gap-4">
+                    <span class="w-14 h-14 rounded-full bg-brand text-white flex items-center justify-center text-2xl font-bold shadow-md" id="confirm-number">-</span>
+                    <div class="text-left">
+                        <span id="confirm-party" class="text-2xl font-bold text-slate-800 block">-</span>
+                        <span id="confirm-leader" class="text-sm text-slate-500 block"></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex gap-3">
+                <button onclick="closeConfirmModal()" type="button" class="flex-1 py-3.5 rounded-xl font-bold text-slate-600 bg-white border-2 border-slate-200 hover:bg-slate-50 transition">
+                    กลับไปแก้ไข
+                </button>
+                <button id="btn-final-confirm" onclick="submitFinalVote()" type="button" class="flex-1 py-3.5 rounded-xl font-bold text-white bg-green-500 hover:bg-green-600 transition flex items-center justify-center gap-2 shadow-lg shadow-green-500/20">
+                    <i class="ph-bold ph-check text-xl"></i> ยืนยันการโหวต
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <style>@keyframes progress { from { width: 100%; } to { width: 0%; } }</style>
+
+    <script>
+        // ==========================================
+        // นาฬิกาแบบเรียลไทม์
+        // ==========================================
+        function updateClock() {
+            const now = new Date();
+            const optionsDate = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+            document.getElementById('realtime-date').innerText = now.toLocaleDateString('th-TH', optionsDate);
+            document.getElementById('realtime-time').innerText = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // ==========================================
+        // ตั้งค่า Supabase
+        // ==========================================
+        const SUPABASE_URL = 'https://zrhomgsdpdkukzqtdrwq.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_PHWCKS6ZtGJ0pOVIW7kz_A_Q1JqxODq';
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        let globalPollCode = ''; 
+        let currentStudent = null;
+        let selectedParty = null;
+        let partiesData = [];
+
+        function switchState(stateId) {
+            document.querySelectorAll('.screen-state').forEach(el => el.classList.remove('active'));
+            document.getElementById('state-' + stateId).classList.add('active');
+        }
+
+        function showToast(message) {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.innerHTML = `<i class="ph-fill ph-warning-circle text-2xl text-red-500"></i> <span>${message}</span>`;
+            container.appendChild(toast);
+            setTimeout(() => { toast.remove(); }, 4000);
+        }
+
+        async function unlockBooth(event) {
+            event.preventDefault();
+            const inputCode = document.getElementById('pollCodeInput').value;
+            
+            try {
+                const { data, error } = await supabaseClient.from('election_settings').select('poll_code, is_active').eq('id', 1).single();
+                if (error || !data) { showToast('ไม่พบข้อมูลการตั้งค่าระบบ'); return; }
+                if (!data.is_active) { showToast('การเลือกตั้งถูกปิดไปแล้วโดยแอดมิน'); return; }
+                if (data.poll_code !== inputCode) { showToast('รหัสเปิดหีบไม่ถูกต้อง!'); return; }
+
+                globalPollCode = inputCode;
+                document.getElementById('pollCodeInput').value = ''; 
+                await loadParties();
+                switchState('verify');
+            } catch (err) { console.error(err); showToast('เกิดข้อผิดพลาดของเครือข่าย'); }
+        }
+
+        async function verifyStudent(event) {
+            event.preventDefault();
+            const studentId = document.getElementById('studentIdInput').value;
+
+            try {
+                const { data: student, error } = await supabaseClient.from('students').select('*').eq('student_id', studentId).single();
+                if (error || !student) { showToast('ไม่พบข้อมูลรหัสนักเรียนนี้ในระบบ'); document.getElementById('studentIdInput').select(); return; }
+                if (student.has_voted) { showToast('นักเรียนรหัสนี้ ได้ใช้สิทธิ์เลือกตั้งไปแล้ว!'); document.getElementById('studentIdInput').select(); return; }
+
+                currentStudent = student;
+                document.getElementById('disp-id').innerText = student.student_id;
+                document.getElementById('disp-name').innerText = `${student.first_name} ${student.last_name}`;
+                document.getElementById('disp-grade').innerText = student.grade_level;
+                document.getElementById('disp-room').innerText = student.room;
+
+                renderParties();
+                switchState('ballot');
+            } catch (err) { console.error(err); showToast('เกิดข้อผิดพลาดในการตรวจสอบสิทธิ์'); }
+        }
+
+        async function loadParties() {
+            const { data } = await supabaseClient.from('parties').select('*').order('party_number', { ascending: true });
+            partiesData = data || [];
+        }
+
+        function renderParties() {
+            const grid = document.getElementById('partyGrid');
+            const abstainZone = document.getElementById('abstainZone');
+            grid.innerHTML = ''; abstainZone.innerHTML = '';
+            selectedParty = null;
+            updateSubmitButton();
+
+            // แยกพรรคปกติ กับ ไม่ประสงค์ลงคะแนน (เบอร์ 0)
+            const normalParties = partiesData.filter(p => p.party_number > 0);
+            const abstainParty = partiesData.find(p => p.party_number === 0);
+
+            normalParties.forEach(p => {
+                const leaderText = p.leader_name && p.leader_name !== '-' && p.leader_name !== '' ? `หัวหน้าพรรค: ${p.leader_name}` : 'ผู้สมัครอิสระ/ไม่ระบุหัวหน้า';
+                grid.innerHTML += `
+                    <div class="party-card normal-party" id="card-party-${p.party_number}" onclick="selectParty(${p.party_number}, '${p.party_name}', '${p.leader_name || ''}')">
+                        <i class="ph-fill ph-check-circle check-icon text-3xl"></i>
+                        <div class="flex items-center gap-4">
+                            <div class="w-14 h-14 shrink-0 rounded-full bg-slate-100 flex items-center justify-center text-2xl font-bold text-slate-600 border border-slate-200 transition-colors" id="badge-${p.party_number}">
+                                ${p.party_number}
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-lg text-slate-800 leading-tight mb-1">${p.party_name}</h4>
+                                <p class="text-xs text-slate-500">${leaderText}</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            if (abstainParty) {
+                abstainZone.innerHTML = `
+                    <div class="abstain-card" id="card-party-0" onclick="selectParty(0, 'ไม่ประสงค์ลงคะแนน', '')">
+                        <i class="ph-fill ph-x-circle check-icon text-3xl"></i>
+                        <h4 class="font-bold text-lg text-slate-600">ไม่ประสงค์ลงคะแนน (Vote No)</h4>
+                    </div>
+                `;
+            }
+        }
+
+        function selectParty(number, name, leader) {
+            selectedParty = { number, name, leader };
+            
+            // ล้าง Style เดิม
+            document.querySelectorAll('.party-card').forEach(card => card.classList.remove('selected'));
+            document.querySelectorAll('.party-card > div > div:first-child').forEach(badge => {
+                badge.classList.remove('bg-brand', 'text-white', 'border-transparent');
+                badge.classList.add('bg-slate-100', 'text-slate-600', 'border-slate-200');
+            });
+            document.querySelectorAll('.abstain-card').forEach(card => card.classList.remove('selected'));
+
+            // ใส่ Style ใหม่
+            if (number === 0) {
+                document.getElementById('card-party-0').classList.add('selected');
+            } else {
+                document.getElementById(`card-party-${number}`).classList.add('selected');
+                const activeBadge = document.getElementById(`badge-${number}`);
+                activeBadge.classList.remove('bg-slate-100', 'text-slate-600', 'border-slate-200');
+                activeBadge.classList.add('bg-brand', 'text-white', 'border-transparent');
+            }
+
+            updateSubmitButton();
+        }
+
+        function updateSubmitButton() {
+            const btn = document.getElementById('btn-submit-intent');
+            if (selectedParty) {
+                btn.disabled = false;
+                btn.classList.remove('bg-slate-300', 'cursor-not-allowed', 'text-white');
+                btn.classList.add('bg-green-500', 'hover:bg-green-600', 'text-white', 'shadow-lg', 'shadow-green-500/20');
+            } else {
+                btn.disabled = true;
+                btn.classList.add('bg-slate-300', 'cursor-not-allowed', 'text-white');
+                btn.classList.remove('bg-green-500', 'hover:bg-green-600', 'text-white', 'shadow-lg', 'shadow-green-500/20');
+            }
+        }
+
+        function openConfirmModal() {
+            if(!selectedParty) return;
+            
+            const numBox = document.getElementById('confirm-number');
+            const bgBox = document.getElementById('confirm-box-bg');
+            const btnConfirm = document.getElementById('btn-final-confirm');
+
+            if (selectedParty.number === 0) {
+                numBox.innerHTML = '<i class="ph-bold ph-x"></i>';
+                numBox.className = 'w-14 h-14 rounded-full bg-red-500 text-white flex items-center justify-center text-3xl font-bold shadow-md';
+                document.getElementById('confirm-party').innerText = 'ไม่ประสงค์ลงคะแนน';
+                document.getElementById('confirm-leader').innerText = '';
+                document.getElementById('confirm-label').innerText = 'คุณเลือกที่จะ';
+                
+                btnConfirm.className = 'flex-1 py-3.5 rounded-xl font-bold text-white bg-red-500 hover:bg-red-600 transition flex items-center justify-center gap-2 shadow-lg shadow-red-500/20';
+            } else {
+                numBox.innerText = selectedParty.number;
+                numBox.className = 'w-14 h-14 rounded-full bg-brand text-white flex items-center justify-center text-2xl font-bold shadow-md';
+                document.getElementById('confirm-party').innerText = selectedParty.name;
+                document.getElementById('confirm-leader').innerText = selectedParty.leader ? `(หัวหน้าพรรค: ${selectedParty.leader})` : '';
+                document.getElementById('confirm-label').innerText = 'คุณกำลังจะลงคะแนนให้';
+
+                btnConfirm.className = 'flex-1 py-3.5 rounded-xl font-bold text-white bg-green-500 hover:bg-green-600 transition flex items-center justify-center gap-2 shadow-lg shadow-green-500/20';
+            }
+
+            const modal = document.getElementById('confirmModal');
+            modal.classList.add('active');
+            setTimeout(() => document.getElementById('modalContent').classList.remove('scale-95'), 10);
+        }
+
+        function closeConfirmModal() {
+            document.getElementById('modalContent').classList.add('scale-95');
+            setTimeout(() => document.getElementById('confirmModal').classList.remove('active'), 200);
+        }
+
+        async function submitFinalVote() {
+            closeConfirmModal();
+
+            try {
+                const { data, error } = await supabaseClient.rpc('submit_vote', {
+                    p_student_id: currentStudent.student_id,
+                    p_poll_code: globalPollCode,
+                    p_party_number: selectedParty.number
+                });
+
+                if (error) {
+                    console.error("RPC Error:", error);
+                    showToast('เกิดข้อผิดพลาด: ' + error.message);
+                } else {
+                    switchState('success');
+                    setTimeout(() => { resetToVerify(); }, 3000);
+                }
+            } catch (err) {
+                console.error("Vote Error:", err);
+                showToast('การเชื่อมต่อมีปัญหา ไม่สามารถบันทึกคะแนนได้');
+            }
+        }
+
+        function resetToVerify() {
+            currentStudent = null;
+            selectedParty = null;
+            document.getElementById('studentIdInput').value = '';
+            switchState('verify');
+            setTimeout(() => document.getElementById('studentIdInput').focus(), 500);
+        }
+    </script>
+</body>
+</html>
